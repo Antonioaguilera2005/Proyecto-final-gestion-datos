@@ -1,0 +1,51 @@
+# ============================================================
+# Saleshealth — Proyecto Final
+# Gestión de Datos · UAX 2025/2026
+# Antonio Aguilera Slavcheva
+# ============================================================
+# Instalación:  pip install -r requirements.txt
+# Entorno recomendado: Python 3.11+
+# ============================================================
+
+# ── Base de datos ────────────────────────────────────────────
+sqlalchemy==2.0.36          # ORM y conexión a PostgreSQL
+psycopg2-binary==2.9.10     # Driver PostgreSQL para SQLAlchemy
+
+# ── Manipulación de datos ────────────────────────────────────
+pandas==2.2.3               # DataFrames y transformaciones ETL
+numpy==1.26.4               # Operaciones numéricas (PCA, normalización)
+
+# ── Machine Learning ─────────────────────────────────────────
+scikit-learn==1.5.2         # StandardScaler · PCA · KMeans
+
+# ── Dashboard ────────────────────────────────────────────────
+streamlit==1.40.0           # Framework web de datos
+plotly==5.24.1              # Gráficos interactivos (scatter, bar, heatmap, radar)
+
+# ── Configuración ────────────────────────────────────────────
+python-dotenv==1.0.1        # Carga de variables de entorno desde .env
+
+# ============================================================
+# Notas de instalación
+# ============================================================
+# 1. Crear entorno virtual (recomendado):
+#      python -m venv venv
+#      source venv/bin/activate        # Linux/Mac
+#      venv\Scripts\activate           # Windows
+#
+# 2. Instalar dependencias:
+#      pip install -r requirements.txt
+#
+# 3. Configurar credenciales en .env (NO subir al repositorio):
+#      DB_USER=postgres
+#      DB_PASSWORD=<tu_password>
+#      DB_HOST=localhost
+#      DB_PORT=5432
+#      DB_NAME_ORIGEN=saleshealth
+#
+# 4. Ejecutar el pipeline ETL:
+#      python -m etl.run_pipeline
+#
+# 5. Lanzar el dashboard:
+#      streamlit run dashboard/app.py
+# ============================================================
