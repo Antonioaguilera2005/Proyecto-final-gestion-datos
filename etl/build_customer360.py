@@ -5,7 +5,6 @@ from sqlalchemy import text
 FECHA_REFERENCIA = pd.Timestamp('2025-12-31')
 
 def build_customer_360(engine):
-    # Ventas
     df_ventas = pd.read_sql("""
         SELECT 
             fs.customer_sk,
@@ -23,7 +22,6 @@ def build_customer_360(engine):
         JOIN dwh.dim_date dd ON fs.date_sk = dd.date_sk
     """, engine)
 
-    # Devoluciones por cliente
     df_returns = pd.read_sql("""
         SELECT dc.customer_sk, SUM(fr.refund_amount) AS total_refund,
                COUNT(*) AS n_returns
@@ -45,12 +43,10 @@ def build_customer_360(engine):
         n_returned     = ('is_returned', 'sum')
     ).reset_index()
 
-    # Incorporar devoluciones
     resumen = resumen.merge(df_returns, on='customer_sk', how='left')
     resumen['total_refund'] = resumen['total_refund'].fillna(0)
     resumen['n_returns']    = resumen['n_returns'].fillna(0)
 
-    # Revenue neto (descontando devoluciones)
     resumen['net_revenue']  = resumen['total_revenue'] - resumen['total_refund']
     resumen['total_cost']   = resumen['total_revenue'] - resumen['total_margin']
     resumen['net_margin']   = (resumen['total_margin'] / resumen['total_revenue']).clip(0, 1)
@@ -59,11 +55,14 @@ def build_customer_360(engine):
     resumen['lifespan_months'] = (
         (FECHA_REFERENCIA - resumen['primera_compra']).dt.days / 30.44
     ).clip(lower=1)
+
     resumen['purchase_frequency'] = resumen['num_pedidos'] / resumen['lifespan_months']
 
-    # CLTV neto
+    # CLTV correcto: ticket_medio × margen × frecuencia_mensual × lifespan
+    # Esto evita inflar multiplicando ingresos totales (que ya incluyen el tiempo)
+    resumen['ticket_medio'] = resumen['net_revenue'] / resumen['num_pedidos']
     resumen['cltv'] = (
-        resumen['net_revenue'] *
+        resumen['ticket_medio'] *
         resumen['net_margin'] *
         resumen['purchase_frequency'] *
         resumen['lifespan_months']
@@ -75,24 +74,20 @@ def build_customer_360(engine):
     resumen['monetary']     = resumen['net_revenue'].round(2)
 
     resumen['R'] = pd.qcut(resumen['recency_days'], 5, labels=[5,4,3,2,1]).astype(int)
-    resumen['F'] = pd.qcut(resumen['frequency'].rank(method='first'), 5, labels=[1,2,3,4,5]).astype(int)
+    resumen['F'] = pd.qcut(resumen['frequency'].rank(method='first'), 5,
+                           labels=[1,2,3,4,5]).astype(int)
     resumen['M'] = pd.qcut(resumen['monetary'], 5, labels=[1,2,3,4,5]).astype(int)
-    resumen['rfm_score'] = resumen['R'].astype(str) + resumen['F'].astype(str) + resumen['M'].astype(str)
+    resumen['rfm_score'] = (resumen['R'].astype(str) + resumen['F'].astype(str) +
+                            resumen['M'].astype(str))
 
     def rfm_segment(row):
         r, f, m = row['R'], row['F'], row['M']
-        if r >= 4 and f >= 4 and m >= 4:
-            return 'Champions'
-        elif r >= 3 and f >= 3:
-            return 'Loyal'
-        elif r >= 4 and f <= 2:
-            return 'New Customers'
-        elif r <= 2 and f >= 3:
-            return 'At Risk'
-        elif r <= 2 and f <= 2:
-            return 'Lost'
-        else:
-            return 'Potential'
+        if r >= 4 and f >= 4 and m >= 4:   return 'Champions'
+        elif r >= 3 and f >= 3:             return 'Loyal'
+        elif r >= 4 and f <= 2:             return 'New Customers'
+        elif r <= 2 and f >= 3:             return 'At Risk'
+        elif r <= 2 and f <= 2:             return 'Lost'
+        else:                               return 'Potential'
 
     resumen['rfm_segment'] = resumen.apply(rfm_segment, axis=1)
 
@@ -134,8 +129,10 @@ def build_customer_360(engine):
         'cluster_label':            None
     })
 
-    resultado.to_sql('customer_360', engine, schema='marts', if_exists='append', index=False)
+    resultado.to_sql('customer_360', engine, schema='marts',
+                     if_exists='append', index=False)
     print(f"  ✅ customer_360: {len(resultado)} filas")
     print(f"     CLTV medio:   {resultado['cltv'].mean():.2f}€")
+    print(f"     CLTV máximo:  {resultado['cltv'].max():.2f}€")
     print(f"     Segmentos:    {resultado['rfm_segment'].value_counts().to_dict()}")
     print(f"     Churn High:   {(resultado['churn_label'] == 'High').sum()} clientes")
